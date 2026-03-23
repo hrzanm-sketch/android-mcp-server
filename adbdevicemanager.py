@@ -130,8 +130,14 @@ class AdbDeviceManager:
         # compressing the ss to avoid "maximum call stack exceeded" error on claude desktop
         with PILImage.open("screenshot.png") as img:
             width, height = img.size
-            new_width = int(width * 0.3)
-            new_height = int(height * 0.3)
+            max_dim = 1600
+            if max(width, height) > max_dim:
+                scale = max_dim / max(width, height)
+                new_width = int(width * scale)
+                new_height = int(height * scale)
+            else:
+                new_width = width
+                new_height = height
             resized_img = img.resize(
                 (new_width, new_height), PILImage.Resampling.LANCZOS
             )
