@@ -127,7 +127,7 @@ class AdbDeviceManager:
         self.device.pull("/sdcard/screenshot.png", "screenshot.png")
         self.device.shell("rm /sdcard/screenshot.png")
 
-        # compressing the ss to avoid "maximum call stack exceeded" error on claude desktop
+        # Resize to max 1600px longest dimension — readable but within Claude context limits
         with PILImage.open("screenshot.png") as img:
             width, height = img.size
             max_dim = 1600
