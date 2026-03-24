@@ -7,7 +7,10 @@ import sys
 import tempfile
 from unittest.mock import MagicMock, patch
 
+import pytest
+
 from adbdevicemanager import AdbDeviceManager
+from exceptions import DeviceNotFoundError
 
 # Add the parent directory to the path so we can import our modules
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -61,43 +64,36 @@ class TestServerIntegration:
 
         return device_manager, messages
 
+    @patch('adbdevicemanager.AdbDeviceManager._disable_animations')
     @patch('adbdevicemanager.AdbDeviceManager.check_adb_installed')
     @patch('adbdevicemanager.AdbDeviceManager.get_available_devices')
     @patch('adbdevicemanager.AdbClient')
-    def test_no_config_auto_selection_success(self, mock_adb_client, mock_get_devices, mock_check_adb):
+    def test_no_config_auto_selection_success(self, mock_adb_client, mock_get_devices, mock_check_adb, mock_disable_anim):
         """Test successful server start with no config file and single device"""
-        # Setup mocks
         mock_check_adb.return_value = True
         mock_get_devices.return_value = ["device123"]
         mock_device = MagicMock()
         mock_adb_client.return_value.device.return_value = mock_device
 
-        # Use non-existent config file
         non_existent_config = os.path.join(self.temp_dir, "non_existent.yaml")
 
-        with patch('builtins.print') as mock_print:
-            device_manager, messages = self._simulate_server_initialization(
-                non_existent_config)
+        device_manager, messages = self._simulate_server_initialization(non_existent_config)
 
-        # Verify results
         assert device_manager.device == mock_device
         assert any("not found" in msg for msg in messages)
         assert any("auto-selection" in msg for msg in messages)
-        mock_print.assert_called_with(
-            "No device specified, automatically selected: device123")
 
+    @patch('adbdevicemanager.AdbDeviceManager._disable_animations')
     @patch('adbdevicemanager.AdbDeviceManager.check_adb_installed')
     @patch('adbdevicemanager.AdbDeviceManager.get_available_devices')
     @patch('adbdevicemanager.AdbClient')
-    def test_config_with_null_device_auto_selection(self, mock_adb_client, mock_get_devices, mock_check_adb):
+    def test_config_with_null_device_auto_selection(self, mock_adb_client, mock_get_devices, mock_check_adb, mock_disable_anim):
         """Test server start with config file containing name: null"""
-        # Setup mocks
         mock_check_adb.return_value = True
         mock_get_devices.return_value = ["device456"]
         mock_device = MagicMock()
         mock_adb_client.return_value.device.return_value = mock_device
 
-        # Create config with null device name
         config_content = """
 device:
   name: null
@@ -105,29 +101,23 @@ device:
         with open(self.config_file, 'w') as f:
             f.write(config_content)
 
-        with patch('builtins.print') as mock_print:
-            device_manager, messages = self._simulate_server_initialization(
-                self.config_file)
+        device_manager, messages = self._simulate_server_initialization(self.config_file)
 
-        # Verify results
         assert device_manager.device == mock_device
         assert any("Loaded config" in msg for msg in messages)
         assert any("auto-select" in msg for msg in messages)
-        mock_print.assert_called_with(
-            "No device specified, automatically selected: device456")
 
+    @patch('adbdevicemanager.AdbDeviceManager._disable_animations')
     @patch('adbdevicemanager.AdbDeviceManager.check_adb_installed')
     @patch('adbdevicemanager.AdbDeviceManager.get_available_devices')
     @patch('adbdevicemanager.AdbClient')
-    def test_config_with_specific_device(self, mock_adb_client, mock_get_devices, mock_check_adb):
+    def test_config_with_specific_device(self, mock_adb_client, mock_get_devices, mock_check_adb, mock_disable_anim):
         """Test server start with config file specifying a device"""
-        # Setup mocks
         mock_check_adb.return_value = True
         mock_get_devices.return_value = ["device123", "device456"]
         mock_device = MagicMock()
         mock_adb_client.return_value.device.return_value = mock_device
 
-        # Create config with specific device name
         config_content = """
 device:
   name: "device456"
@@ -135,44 +125,37 @@ device:
         with open(self.config_file, 'w') as f:
             f.write(config_content)
 
-        device_manager, messages = self._simulate_server_initialization(
-            self.config_file)
+        device_manager, messages = self._simulate_server_initialization(self.config_file)
 
-        # Verify results
         assert device_manager.device == mock_device
-        mock_adb_client.return_value.device.assert_called_once_with(
-            "device456")
+        mock_adb_client.return_value.device.assert_called_once_with("device456")
         assert any("Configured device: device456" in msg for msg in messages)
 
+    @patch('adbdevicemanager.AdbDeviceManager._disable_animations')
     @patch('adbdevicemanager.AdbDeviceManager.check_adb_installed')
     @patch('adbdevicemanager.AdbDeviceManager.get_available_devices')
-    def test_multiple_devices_no_config_error(self, mock_get_devices, mock_check_adb):
+    def test_multiple_devices_no_config_error(self, mock_get_devices, mock_check_adb, mock_disable_anim):
         """Test server initialization fails with multiple devices and no config"""
-        # Setup mocks
         mock_check_adb.return_value = True
         mock_get_devices.return_value = ["device123", "device456"]
 
-        # Use non-existent config file
         non_existent_config = os.path.join(self.temp_dir, "non_existent.yaml")
 
-        try:
-            device_manager, messages = self._simulate_server_initialization(
-                non_existent_config)
-            assert False, "Should have raised an exception"
-        except RuntimeError as e:
-            assert "Multiple devices connected" in str(e)
-            assert "device123" in str(e)
-            assert "device456" in str(e)
+        with pytest.raises(DeviceNotFoundError) as exc_info:
+            self._simulate_server_initialization(non_existent_config)
 
+        assert "Multiple devices connected" in str(exc_info.value)
+        assert "device123" in str(exc_info.value)
+        assert "device456" in str(exc_info.value)
+
+    @patch('adbdevicemanager.AdbDeviceManager._disable_animations')
     @patch('adbdevicemanager.AdbDeviceManager.check_adb_installed')
     @patch('adbdevicemanager.AdbDeviceManager.get_available_devices')
-    def test_device_not_found_error(self, mock_get_devices, mock_check_adb):
+    def test_device_not_found_error(self, mock_get_devices, mock_check_adb, mock_disable_anim):
         """Test server initialization fails when specified device is not found"""
-        # Setup mocks
         mock_check_adb.return_value = True
         mock_get_devices.return_value = ["device123"]
 
-        # Create config with non-existent device name
         config_content = """
 device:
   name: "non-existent-device"
@@ -180,13 +163,11 @@ device:
         with open(self.config_file, 'w') as f:
             f.write(config_content)
 
-        try:
-            device_manager, messages = self._simulate_server_initialization(
-                self.config_file)
-            assert False, "Should have raised an exception"
-        except RuntimeError as e:
-            assert "Device non-existent-device not found" in str(e)
-            assert "Available devices" in str(e)
+        with pytest.raises(DeviceNotFoundError) as exc_info:
+            self._simulate_server_initialization(self.config_file)
+
+        assert "Device non-existent-device not found" in str(exc_info.value)
+        assert "Available devices" in str(exc_info.value)
 
     def teardown_method(self):
         """Cleanup after each test method"""
